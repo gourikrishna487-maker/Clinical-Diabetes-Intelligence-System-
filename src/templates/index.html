@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Forecast Pro | Professional Analytics Suite</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #030712; color: #f8fafc; overflow-x: hidden; }
+        .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 28px; }
+        .neon-border { border: 1px solid rgba(34, 211, 238, 0.3); box-shadow: 0 0 25px rgba(34, 211, 238, 0.05); }
+        .neon-text { color: #22d3ee; text-shadow: 0 0 20px rgba(34, 211, 238, 0.3); }
+        .animate-stagger { opacity: 0; transform: translateY(30px); }
+        input[type="range"] { accent-color: #22d3ee; cursor: pointer; }
+        .loader-ring { width: 32px; height: 32px; border: 4px solid #22d3ee; border-bottom-color: transparent; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .tooltip-box { display: none; position: absolute; z-index: 50; padding: 12px; font-size: 11px; background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 220px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .info-trigger:hover + .tooltip-box { display: block; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- MEDICAL TOOLTIP DATABASE ---
+        const TOOLTIPS = {
+            Pregnancies: "Number of times pregnant. Influences hormonal balance and gestational metabolic history.",
+            Glucose: "Plasma glucose concentration (2 hours in an oral glucose tolerance test). Primary marker for metabolic state.",
+            BloodPressure: "Diastolic blood pressure (mm Hg). High levels indicate vascular strain often linked to metabolic syndrome.",
+            SkinThickness: "Triceps skin fold thickness (mm). A proxy for body fat distribution and peripheral subcutaneous adipose tissue.",
+            Insulin: "2-Hour serum insulin (mu U/ml). Measures pancreatic responsiveness and potential insulin resistance.",
+            BMI: "Body Mass Index (weight in kg/(height in m)^2). A foundational indicator of overall adipose tissue mass.",
+            DiabetesPedigreeFunction: "Genetic influence based on family history. Quantifies hereditary metabolic predisposition.",
+            Age: "Chronological age. Cumulative metabolic load and cellular aging significantly impact cellular function.",
+            HighBP: "Clinically diagnosed hypertension. A major co-factor in metabolic dysfunction.",
+            HighChol: "High blood cholesterol. Elevated lipids often precede or accompany irregular glucose processing.",
+            Smoker: "Current or former tobacco use. Directly increases inflammation and compromises vascular integrity.",
+            Stroke: "History of cerebrovascular accident. Indicates advanced cardiovascular or metabolic complications.",
+            HeartDiseaseorAttack: "Presence of coronary artery disease or past myocardial infarction history.",
+            PhysActivity: "Weekly physical exertion. Critical for mitochondrial biogenesis and glucose clearing by muscles.",
+            GenHlth: "Patient's subjective perception of overall health. Correlates strongly with underlying metabolic load.",
+            MentHlth: "Days of poor mental health. Chronic stress increases cortisol, a direct glucose-elevating hormone.",
+            PhysHlth: "Days of physical illness/injury in the past month.",
+            Fruits: "Daily intake of essential bioflavonoids and natural fiber.",
+            Veggies: "Intake of leafy greens rich in magnesium and chromium and co-factors for insulin."
+        };
+
+        // --- UI COMPONENTS ---
+
+        const GlassMetric = ({ title, value, color="#22d3ee", info }) => (
+            <div className="glass p-8 transition-all duration-700 hover:scale-[1.03] hover:shadow-[0_20px_50px_rgba(0,0,0,0.4)] animate-stagger border-t-2 border-white/5">
+                <div className="flex justify-between items-center mb-3">
+                    <span className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">{title}</span>
+                    <div className="relative">
+                        <span className="info-trigger text-slate-600 hover:text-cyan-400 cursor-help transition-colors text-xs">ⓘ</span>
+                        <div className="tooltip-box">{info}</div>
+                    </div>
+                </div>
+                <div className="text-4xl font-extrabold tracking-tighter" style={{ color }}>{value}</div>
+                <div className="mt-5 h-[2px] w-12 rounded-full opacity-20" style={{ backgroundColor: color }}></div>
+            </div>
+        );
+
+        const ShapCard = ({ data }) => {
+            if (!data) return null;
+            const features = Object.entries(data).sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+            return (
+                <div className="glass p-8 animate-stagger">
+                    <h3 className="text-lg font-black mb-8 uppercase tracking-widest flex items-center gap-3">
+                        <span className="w-2 h-2 bg-rose-500 rounded-full"></span> Contribution Analysis
+                    </h3>
+                    <div className="space-y-4">
+                        {features.slice(0, 8).map(([key, val]) => (
+                            <div key={key} className="group">
+                                <div className="flex justify-between text-[11px] font-bold uppercase text-slate-400 mb-1 group-hover:text-cyan-300 transition-colors">
+                                    <span>{key}</span>
+                                    <span>{val > 0 ? "Increased Risk" : "Reduced Risk"}</span>
+                                </div>
+                                <div className="h-3 bg-slate-900/50 rounded-full overflow-hidden flex gap-0.5">
+                                    <div 
+                                        className={`h-full transition-all duration-1000 ${val > 0 ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]' : 'bg-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.3)]'}`}
+                                        style={{ width: `${Math.min(Math.abs(val) * 80, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [mode, setMode] = useState('clinical');
+            const [isSandbox, setIsSandbox] = useState(false);
+            const [formData, setFormData] = useState({});
+            const [result, setResult] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [history, setHistory] = useState([]);
+
+            useEffect(() => {
+                gsap.to(".animate-stagger", { opacity: 1, y: 0, stagger: 0.1, duration: 1, ease: "expo.out" });
+                fetchHistory();
+            }, []);
+
+            const fetchHistory = async () => {
+                try {
+                    const res = await fetch('/api/history');
+                    const data = await res.json();
+                    setHistory(data);
+                } catch (e) { console.error(e); }
+            };
+
+            const runPrediction = async (data = formData) => {
+                try {
+                    const res = await fetch(`/api/predict/${mode}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const d = await res.json();
+                    setResult(d);
+                    if (!isSandbox) fetchHistory();
+                } catch (err) { console.error(err); }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                await runPrediction();
+                setLoading(false);
+            };
+
+            const updateField = (name, val) => {
+                const newData = { ...formData, [name]: val };
+                setFormData(newData);
+                if (isSandbox) runPrediction(newData);
+            };
+
+            useEffect(() => {
+                const defaults = mode === 'clinical' 
+                    ? { Pregnancies: 1, Glucose: 110, BloodPressure: 72, SkinThickness: 23, Insulin: 30, BMI: 28.5, DiabetesPedigreeFunction: 0.37, Age: 33 }
+                    : { HighBP: 0, HighChol: 0, CholCheck: 1, BMI: 27.2, Smoker: 0, Stroke: 0, HeartDiseaseorAttack: 0, PhysActivity: 1, Fruits: 1, Veggies: 1, HvyAlcoholConsump: 0, AnyHealthcare: 1, NoDocbcCost: 0, GenHlth: 2, MentHlth: 2, PhysHlth: 0, DiffWalk: 0, Sex: 0, Age: 6, Education: 5, Income: 6 };
+                setFormData(defaults);
+                setResult(null);
+            }, [mode]);
+
+            return (
+                <div className="min-h-screen px-6 py-12 md:px-16 lg:px-24 max-w-[1600px] mx-auto">
+                    {/* Hero Nav */}
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-20 gap-8 animate-stagger">
+                        <div>
+                            <div className="flex items-center gap-4 mb-4">
+                                <span className="bg-cyan-500/20 text-cyan-400 px-4 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border border-cyan-500/30">Release v3.2</span>
+                                <span className="h-[2px] w-12 bg-slate-800"></span>
+                                <span className="text-slate-500 text-[10px] uppercase font-black tracking-widest">Medical Intel Engine</span>
+                            </div>
+                            <h1 className="text-6xl font-black tracking-tighter leading-none mb-4">BIO-FORECAST <span className="neon-text italic font-light drop-shadow-[0_0_30px_rgba(34,211,238,0.5)]">PRO</span></h1>
+                            <p className="text-slate-500 font-medium max-w-xl text-lg">High-precision metabolic risk forecasting driven by advanced neural modeling and clinical intelligence.</p>
+                        </div>
+                        <div className="flex bg-slate-900/50 p-2 rounded-[24px] border border-white/5">
+                            <button onClick={() => setMode('clinical')} className={`px-10 py-4 rounded-[20px] text-xs font-black tracking-[0.2em] transition-all duration-500 ${mode === 'clinical' ? 'bg-cyan-500 text-slate-900 shadow-[0_15px_40px_rgba(34,211,238,0.3)]' : 'text-slate-500 hover:text-slate-300'}`}>CLINICAL</button>
+                            <button onClick={() => setMode('lifestyle')} className={`px-10 py-4 rounded-[20px] text-xs font-black tracking-[0.2em] transition-all duration-500 ${mode === 'lifestyle' ? 'bg-cyan-500 text-slate-900 shadow-[0_15px_40px_rgba(34,211,238,0.3)]' : 'text-slate-500 hover:text-slate-300'}`}>LIFESTYLE</button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                        {/* Control Center */}
+                        <div className="lg:col-span-4 space-y-8 animate-stagger">
+                            <div className="glass p-10 neon-border relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4">
+                                    <div className="flex flex-col items-end gap-2">
+                                        <span className="text-[9px] font-black text-slate-600 uppercase">Sandbox Mode</span>
+                                        <div 
+                                            onClick={() => setIsSandbox(!isSandbox)}
+                                            className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-all duration-500 ${isSandbox ? 'bg-cyan-500' : 'bg-slate-800'}`}
+                                        >
+                                            <div className={`w-4 h-4 bg-white rounded-full transition-all duration-500 ${isSandbox ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <h3 className="text-xl font-black mb-10 tracking-tight flex items-center gap-3">
+                                    <span className="w-5 h-[2px] bg-cyan-500"></span> PARAMETER INPUT
+                                </h3>
+                                
+                                <form onSubmit={handleSubmit} className="space-y-8">
+                                    {Object.entries(formData).map(([key, val]) => (
+                                        (key !== 'prediction' && TOOLTIPS[key]) && (
+                                            <div key={key} className="group relative">
+                                                <div className="flex justify-between text-[11px] font-black uppercase text-slate-500 mb-3 tracking-widest group-hover:text-cyan-400 transition-colors">
+                                                    <span>{key.replace(/([A-Z])/g, ' $1')}</span>
+                                                    <div className="relative">
+                                                        <span className="info-trigger cursor-help tracking-normal">ⓘ</span>
+                                                        <div className="tooltip-box">{TOOLTIPS[key]}</div>
+                                                    </div>
+                                                </div>
+                                                {typeof val === 'number' && key !== 'GenHlth' ? (
+                                                    <input 
+                                                        type={key === 'BMI' || key === 'DiabetesPedigreeFunction' ? 'number' : 'range'} 
+                                                        step={key === 'BMI' ? '0.1' : '1'}
+                                                        min={key === 'Glucose' ? '0' : '0'} 
+                                                        max={key === 'Glucose' ? '250' : '100'}
+                                                        value={val} 
+                                                        onChange={(e) => updateField(key, parseFloat(e.target.value))} 
+                                                        className={key === 'BMI' ? "w-full bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl text-cyan-400 font-bold focus:border-cyan-500 outline-none" : "w-full"} 
+                                                    />
+                                                ) : key === 'GenHlth' ? (
+                                                    <input type="range" min="1" max="5" value={val} onChange={(e) => updateField(key, parseInt(e.target.value))} className="w-full" />
+                                                ) : (
+                                                    <div onClick={() => updateField(key, val === 1 ? 0 : 1)} className={`w-full py-4 text-center rounded-xl border font-bold text-xs cursor-pointer transition-all ${val === 1 ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-slate-950/50 border-slate-800 text-slate-600'}`}>
+                                                        {val === 1 ? 'ACTIVE' : 'INACTIVE'}
+                                                    </div>
+                                                )}
+                                                {typeof val === 'number' && key !== 'BMI' && <div className="text-right text-xs font-black text-cyan-400 mt-2">{val}</div>}
+                                            </div>
+                                        )
+                                    ))}
+                                    {!isSandbox && (
+                                        <button disabled={loading} className="w-full py-6 mt-6 bg-cyan-500 text-slate-900 shadow-[0_20px_50px_rgba(34,211,238,0.3)] font-black uppercase text-xs tracking-widest rounded-2xl flex justify-center items-center gap-4 hover:scale-[1.02] transition-all">
+                                            {loading ? <span className="loader-ring"></span> : "EXECUTE BIO-SCAN"}
+                                        </button>
+                                    )}
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* Intelligence Feed */}
+                        <div className="lg:col-span-8 space-y-10">
+                            {result ? (
+                                <div className="space-y-10">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <GlassMetric title="Risk Probability" value={`${(result.probability * 100).toFixed(1)}%`} info="Confidence index of metabolic irregularites." />
+                                        <GlassMetric title="Clinical State" value={result.risk_level.toUpperCase()} color={result.probability > 0.4 ? "#f43f5e" : result.probability > 0.1 ? "#f59e0b" : "#10b981"} info="Primary risk categorization." />
+                                        <GlassMetric title="Assessed Track" value={mode.toUpperCase()} color="#64748b" info="Active neural computation path." />
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
+                                        <ShapCard data={result.shap} />
+                                        <div className="glass p-10 animate-stagger border-t-2 border-emerald-500/20">
+                                            <h3 className="text-lg font-black mb-10 uppercase tracking-widest flex items-center gap-3 text-emerald-400">
+                                                <span className="w-6 h-[2px] bg-emerald-500"></span> Clinical Roadmap
+                                            </h3>
+                                            <div className="space-y-6">
+                                                {result.advice.map((item, idx) => (
+                                                    <div key={idx} className="group cursor-default">
+                                                        <div className="text-xs font-black text-emerald-500/80 uppercase mb-2 tracking-widest group-hover:text-emerald-400 transition-colors">{item.tip}</div>
+                                                        <p className="text-sm text-slate-400 leading-relaxed font-medium">{item.detail}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="glass h-[600px] flex flex-col items-center justify-center p-20 text-center animate-stagger border-dashed border-2 border-slate-900 group">
+                                    <div className="w-24 h-24 rounded-full bg-cyan-500/5 flex items-center justify-center mb-8 group-hover:scale-110 transition-all duration-700">
+                                        <span className="text-5xl animate-pulse">🧬</span>
+                                    </div>
+                                    <h2 className="text-3xl font-black text-slate-400 tracking-tighter">System Idle</h2>
+                                    <p className="text-slate-600 max-w-sm mt-4 font-medium leading-relaxed uppercase text-[10px] tracking-widest">Awaiting biometric synchronization. Adjust parameters in the control center to initiate neural forecast.</p>
+                                </div>
+                            )}
+
+                            {/* Archive Dashboard */}
+                            <div className="glass p-10 animate-stagger">
+                                <h3 className="text-xl font-black mb-10 uppercase tracking-widest flex items-center gap-3">
+                                    <span className="w-8 h-[2px] bg-slate-700"></span> Bio-Archive Timeline
+                                </h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em] border-b border-white/5">
+                                                <th className="pb-6">Event Time</th>
+                                                <th className="pb-6">Track</th>
+                                                <th className="pb-6">Probability</th>
+                                                <th className="pb-6">Outcome</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-sm font-bold">
+                                            {history.map(h => (
+                                                <tr key={h.id} className="border-b border-white/5 hover:bg-white/[0.03] group transition-all">
+                                                    <td className="py-6 text-slate-600 font-medium tracking-tight uppercase text-xs">{new Date(h.timestamp).toLocaleString()}</td>
+                                                    <td className="py-6 text-cyan-400/70 group-hover:text-cyan-400">{h.assessment_type.toUpperCase()}</td>
+                                                    <td className="py-6 tracking-tighter text-lg font-black italic">{(h.probability * 100).toFixed(1)}%</td>
+                                                    <td className={`py-6 text-xs uppercase tracking-widest ${h.risk_level === 'High' ? 'text-rose-500' : 'text-emerald-500'}`}>{h.risk_level}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
